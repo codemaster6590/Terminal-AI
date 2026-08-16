@@ -76,12 +76,6 @@ The installed `ai` program is a Python executable, so it is not tied to Bash syn
 For Fish, for example:
 
 ```fish
-aI "hello"
-```
-
-Use the actual command name `ai` (lowercase):
-
-```fish
 ai "hello"
 ```
 
@@ -118,12 +112,6 @@ ai "hello"
 ```
 
 Interactive mode:
-
-```bash
-aI
-```
-
-Use the actual command name `ai` (lowercase):
 
 ```bash
 ai
