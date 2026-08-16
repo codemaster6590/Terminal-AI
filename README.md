@@ -8,44 +8,58 @@ A small Linux terminal AI client powered by Ollama. It supports one-shot prompts
 - Bash
 - `curl`
 - Python 3
-- [Ollama](https://ollama.com/)
+- Ollama
 - An Ollama model
 
 ## Install Ollama
 
-Install Ollama using its official Linux installer, then make sure the Ollama service is running.
+Install Ollama using its official Linux installer:
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Make sure Ollama is running. For a temporary foreground server:
+
+```bash
 ollama serve
 ```
 
-In another terminal, download a model. For a 12 GB GPU, `qwen3:8b` is a reasonable starting point:
+## Easy setup
 
-```bash
-ollama pull qwen3:8b
-```
-
-You can choose another model if your hardware is different.
-
-## Install Terminal-AI
-
-Clone the repository and install the command:
+After Ollama is installed and running, the repository includes a setup script that downloads the default model and installs `ai`:
 
 ```bash
 git clone https://github.com/codemaster6590/Terminal-AI.git
 cd Terminal-AI
-sudo install -m 755 ai /usr/local/bin/ai
+./setup.sh
 ```
 
-Or install it just for your user:
+The default model is `qwen3:8b`. To use a different model during setup:
+
+```bash
+OLLAMA_MODEL=qwen3:4b ./setup.sh
+```
+
+By default the command is installed to `/usr/local/bin/ai`. To install it without sudo:
 
 ```bash
 mkdir -p ~/.local/bin
-install -m 755 ai ~/.local/bin/ai
+AI_INSTALL_DIR="$HOME/.local/bin" ./setup.sh
 ```
 
 Make sure `~/.local/bin` is in your `PATH`.
+
+## Manual install
+
+If you prefer to do the steps yourself:
+
+```bash
+ollama pull qwen3:8b
+git clone https://github.com/codemaster6590/Terminal-AI.git
+cd Terminal-AI
+sudo install -m 755 ai /usr/local/bin/ai
+```
 
 ## Execute
 
@@ -61,13 +75,19 @@ Choose a model with a flag:
 ai --model qwen3:8b "explain pointers"
 ```
 
+Thinking is **off by default** for faster responses. Enable it when you actually want deeper reasoning:
+
+```bash
+ai --think "solve this carefully: ..."
+```
+
 Interactive mode:
 
 ```bash
 ai
 ```
 
-Type messages at the `>` prompt. Use `/exit` or `/quit` to leave.
+Inside interactive mode, `/think` toggles thinking on or off for the current session.
 
 ## Persistent chats
 
@@ -119,6 +139,7 @@ Inside `ai`:
 /new
 /chats
 /clear
+/think
 /exit
 ```
 
