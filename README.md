@@ -5,60 +5,108 @@ A small Linux terminal AI client powered by Ollama. It supports one-shot prompts
 ## Requirements
 
 - Linux
-- Bash
-- `curl`
+- Bash for `setup.sh` (the installed `ai` command works from Bash, Fish, Zsh, Dash, and other common shells)
 - Python 3
+- curl
 - Ollama
-- An Ollama model
 
-## Install Ollama
+The setup script supports major Linux families using `pacman`, `apt`, `dnf`, `zypper`, or `apk`.
 
-Install Ollama using its official Linux installer:
+## Easy setup
+
+Install Git with your distro's package manager, then run these three commands:
 
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh
+git clone https://github.com/codemaster6590/Terminal-AI.git
+cd Terminal-AI
+bash setup.sh
 ```
 
-Make sure Ollama is running. For a temporary foreground server:
+`setup.sh` detects the Linux distribution, installs missing `curl`/Python dependencies, installs Ollama if needed, starts Ollama when possible, downloads `qwen3:8b`, and installs `ai`.
+
+### Arch Linux
+
+```bash
+pacman -Sy --noconfirm git
+```
+
+### Debian / Ubuntu
+
+```bash
+sudo apt update && sudo apt install -y git
+```
+
+### Fedora
+
+```bash
+sudo dnf install -y git
+```
+
+### openSUSE
+
+```bash
+sudo zypper install -y git
+```
+
+### Alpine
+
+```bash
+apk add git
+```
+
+Then use the three setup commands above.
+
+If Ollama's installer or your system does not provide a working service, start it manually with:
 
 ```bash
 ollama serve
 ```
 
-## Easy setup
+## Shell support
 
-After Ollama is installed and running, the repository includes a setup script that downloads the default model and installs `ai`:
+The installed `ai` program is a Python executable, so it is not tied to Bash syntax. It can be launched from common shells including:
 
-```bash
-git clone https://github.com/codemaster6590/Terminal-AI.git
-cd Terminal-AI
-./setup.sh
+- Bash
+- Fish
+- Zsh
+- Dash
+- Ksh
+- Nushell
+
+For Fish, for example:
+
+```fish
+aI "hello"
 ```
+
+Use the actual command name `ai` (lowercase):
+
+```fish
+ai "hello"
+```
+
+The setup script itself should be invoked as `bash setup.sh`, so it works even when your login shell is Fish or another shell.
+
+## Model
 
 The default model is `qwen3:8b`. To use a different model during setup:
 
 ```bash
-OLLAMA_MODEL=qwen3:4b ./setup.sh
+OLLAMA_MODEL=qwen3:4b bash setup.sh
 ```
 
-By default the command is installed to `/usr/local/bin/ai`. To install it without sudo:
+You can also select a model per request:
 
 ```bash
-mkdir -p ~/.local/bin
-AI_INSTALL_DIR="$HOME/.local/bin" ./setup.sh
+ai --model qwen3:8b "explain pointers"
 ```
 
-Make sure `~/.local/bin` is in your `PATH`.
+## Thinking
 
-## Manual install
-
-If you prefer to do the steps yourself:
+Thinking is **off by default** for faster responses. Enable it when you actually want deeper reasoning:
 
 ```bash
-ollama pull qwen3:8b
-git clone https://github.com/codemaster6590/Terminal-AI.git
-cd Terminal-AI
-sudo install -m 755 ai /usr/local/bin/ai
+ai --think "solve this carefully: ..."
 ```
 
 ## Execute
@@ -69,25 +117,17 @@ One-shot prompt:
 ai "hello"
 ```
 
-Choose a model with a flag:
-
-```bash
-ai --model qwen3:8b "explain pointers"
-```
-
-Thinking is **off by default** for faster responses. Enable it when you actually want deeper reasoning:
-
-```bash
-ai --think "solve this carefully: ..."
-```
-
 Interactive mode:
+
+```bash
+aI
+```
+
+Use the actual command name `ai` (lowercase):
 
 ```bash
 ai
 ```
-
-Inside interactive mode, `/think` toggles thinking on or off for the current session.
 
 ## Persistent chats
 
@@ -147,6 +187,6 @@ Inside `ai`:
 
 ## Notes
 
-Terminal-AI currently targets Linux only. It talks directly to the local Ollama HTTP API, so no API key, payment, or cloud AI account is required. Conversation history is stored locally on your machine.
+Terminal-AI currently targets Linux. It talks directly to the local Ollama HTTP API, so no API key, payment, or cloud AI account is required. Conversation history is stored locally on your machine.
 
 The current version is a CLI prototype. A full TUI can be added later without changing the persistent chat storage design.
