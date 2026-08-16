@@ -5,6 +5,11 @@ REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MODEL="${OLLAMA_MODEL:-qwen3:8b}"
 INSTALL_DIR="${AI_INSTALL_DIR:-/usr/local/bin}"
 
+if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "error: Terminal-AI currently supports Linux only." >&2
+    exit 1
+fi
+
 if [[ "${EUID}" -eq 0 ]]; then
     SUDO=""
 elif command -v sudo >/dev/null 2>&1; then
@@ -17,7 +22,7 @@ fi
 
 if ! command -v ollama >/dev/null 2>&1; then
     echo "error: Ollama is not installed." >&2
-    echo "Install Ollama first, then rerun ./setup.sh." >&2
+    echo "Install Ollama first, then rerun this script." >&2
     echo "" >&2
     echo "Official installer:" >&2
     echo "  curl -fsSL https://ollama.com/install.sh | sh" >&2
@@ -35,8 +40,8 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 if ! curl -fsS --max-time 3 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-    echo "Ollama is not reachable at http://127.0.0.1:11434."
-    echo "Start it with: ollama serve"
+    echo "Ollama is not reachable at http://127.0.0.1:11434." >&2
+    echo "Start it with: ollama serve" >&2
     exit 1
 fi
 
