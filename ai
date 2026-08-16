@@ -2,15 +2,8 @@
 set -euo pipefail
 
 # Terminal-AI: a small Linux terminal client for Ollama.
-# Requires: bash, curl, python3, and a running Ollama server.
-
 exec python3 - "$@" <<'PY'
-import argparse
-import json
-import os
-import sqlite3
-import subprocess
-import sys
+import json, os, sqlite3, subprocess, sys
 from pathlib import Path
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
@@ -22,181 +15,138 @@ def db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     con.execute("CREATE TABLE IF NOT EXISTS chats (name TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-    con.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(chat) REFERENCES chats(name))")
+    con.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
     con.execute("INSERT OR IGNORE INTO chats(name) VALUES (?)", ("main",))
     con.commit()
     return con
 
 
-def run_ollama(model, messages, think=False):
-    payload = json.dumps({"model": model, "messages": messages, "stream": False, "think": think})
+def curl_json(path, payload=None, timeout=600):
+    cmd = ["curl", "-fsS", "--max-time", str(timeout), f"{OLLAMA_URL}{path}"]
+    if payload is not None:
+        cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
     try:
-        result = subprocess.run(
-            ["curl", "-fsS", "--max-time", "600", f"{OLLAMA_URL}/api/chat", "-H", "Content-Type: application/json", "-d", payload],
-            text=True, capture_output=True,
-        )
+        r = subprocess.run(cmd, text=True, capture_output=True)
     except FileNotFoundError:
-        print("error: curl is required", file=sys.stderr)
-        sys.exit(1)
-    if result.returncode != 0:
+        print("error: curl is required", file=sys.stderr); sys.exit(1)
+    if r.returncode != 0:
         print("error: could not reach Ollama", file=sys.stderr)
-        print("Make sure Ollama is installed and running with: ollama serve", file=sys.stderr)
-        if result.stderr:
-            print(result.stderr.strip(), file=sys.stderr)
+        print("Start Ollama with: ollama serve", file=sys.stderr)
+        if r.stderr: print(r.stderr.strip(), file=sys.stderr)
         sys.exit(1)
-    try:
-        data = json.loads(result.stdout)
+    try: return json.loads(r.stdout)
     except json.JSONDecodeError:
-        print("error: Ollama returned invalid JSON", file=sys.stderr)
-        print(result.stdout, file=sys.stderr)
-        sys.exit(1)
-    if "error" in data:
-        print(f"error: {data['error']}", file=sys.stderr)
-        sys.exit(1)
-    return data["message"]["content"]
+        print("error: Ollama returned invalid JSON", file=sys.stderr); sys.exit(1)
 
 
 def model_exists(model):
     try:
-        result = subprocess.run(["curl", "-fsS", "--max-time", "10", f"{OLLAMA_URL}/api/tags"], text=True, capture_output=True)
-        if result.returncode != 0:
-            return None
-        models = json.loads(result.stdout).get("models", [])
+        models = curl_json("/api/tags", timeout=10).get("models", [])
         return model in {m.get("name", "") for m in models}
-    except Exception:
-        return None
+    except SystemExit: return None
 
 
-def list_chats(con):
-    rows = con.execute("SELECT c.name, COUNT(m.id) FROM chats c LEFT JOIN messages m ON m.chat = c.name GROUP BY c.name ORDER BY c.name").fetchall()
-    for name, count in rows:
+def run_ollama(model, messages, think):
+    data = curl_json("/api/chat", {"model": model, "messages": messages, "stream": False, "think": think})
+    if "error" in data:
+        print(f"error: {data['error']}", file=sys.stderr); sys.exit(1)
+    return data["message"]["content"]
+
+
+def save(con, chat, role, content):
+    con.execute("INSERT INTO messages(chat, role, content) VALUES (?, ?, ?)", (chat, role, content)); con.commit()
+
+
+def load(con, chat):
+    return [{"role": r, "content": c} for r, c in con.execute("SELECT role, content FROM messages WHERE chat=? ORDER BY id", (chat,))]
+
+
+def chats(con):
+    for name, count in con.execute("SELECT c.name, COUNT(m.id) FROM chats c LEFT JOIN messages m ON m.chat=c.name GROUP BY c.name ORDER BY c.name"):
         print(f"{name}\t{count} messages")
 
 
-def delete_chat(con, name):
-    if name == "main":
-        print("error: the main chat cannot be deleted; use --clear-memory instead", file=sys.stderr)
-        sys.exit(1)
-    con.execute("DELETE FROM messages WHERE chat = ?", (name,))
-    con.execute("DELETE FROM chats WHERE name = ?", (name,))
-    con.commit()
-    print(f"deleted chat: {name}")
-
-
-def clear_memory(con):
-    con.execute("DELETE FROM messages")
-    con.commit()
-    print("cleared all saved conversation memory")
-
-
-def load_messages(con, chat, new=False):
-    if new:
-        return []
-    rows = con.execute("SELECT role, content FROM messages WHERE chat = ? ORDER BY id", (chat,)).fetchall()
-    return [{"role": role, "content": content} for role, content in rows]
-
-
-def save_message(con, chat, role, content):
-    con.execute("INSERT INTO messages(chat, role, content) VALUES (?, ?, ?)", (chat, role, content))
-    con.commit()
-
-
 def ask(con, chat, model, prompt, messages, think):
-    messages.append({"role": "user", "content": prompt})
-    save_message(con, chat, "user", prompt)
+    messages.append({"role":"user", "content":prompt}); save(con, chat, "user", prompt)
     answer = run_ollama(model, messages, think)
-    messages.append({"role": "assistant", "content": answer})
-    save_message(con, chat, "assistant", answer)
+    messages.append({"role":"assistant", "content":answer}); save(con, chat, "assistant", answer)
     print(answer)
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="ai", description="A persistent terminal AI client for Ollama.")
-    parser.add_argument("prompt", nargs="*", help="prompt to send")
-    parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"Ollama model (default: {DEFAULT_MODEL})")
-    parser.add_argument("-c", "--chat", default="main", help="persistent chat name (default: main)")
-    parser.add_argument("--new", action="store_true", help="ignore saved messages for this session")
-    parser.add_argument("--think", action="store_true", help="enable Qwen/Ollama thinking mode (slower, useful for reasoning)")
-    parser.add_argument("--new-chat", metavar="NAME", help="create/select a new persistent chat")
-    parser.add_argument("--chats", action="store_true", help="list saved chats")
-    parser.add_argument("--delete-chat", metavar="NAME", help="delete a saved chat")
-    parser.add_argument("--clear-memory", action="store_true", help="delete all saved messages")
-    args = parser.parse_args()
-
-    if os.name != "posix":
-        print("error: this version supports Linux only", file=sys.stderr)
-        sys.exit(1)
-    if subprocess.run(["bash", "-c", "command -v curl >/dev/null"], capture_output=True).returncode != 0:
-        print("error: curl is required", file=sys.stderr)
-        sys.exit(1)
-
-    con = db()
-    if args.chats:
-        list_chats(con)
-        return
-    if args.clear_memory:
-        clear_memory(con)
-        return
-    if args.delete_chat:
-        delete_chat(con, args.delete_chat)
+    # Easy words are accepted as commands, so help is optional.
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("help", "?", "-h", "--help"):
+        print("ai [message]                 Ask AI")
+        print("ai new [name]                New chat")
+        print("ai chats                     List chats")
+        print("ai clear                     Clear memory")
+        print("ai delete [name]             Delete chat")
+        print("ai think [message]           Ask with thinking enabled")
+        print("ai model [name] [message]    Use another model")
+        print("ai --think [message]         Same as above")
         return
 
-    chat = args.new_chat or args.chat
-    con.execute("INSERT OR IGNORE INTO chats(name) VALUES (?)", (chat,))
-    con.commit()
+    model = DEFAULT_MODEL; chat = "main"; think = False; new = False
+    prompt = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--think", "-t"):
+            think = True; i += 1; continue
+        if a in ("--new",):
+            new = True; i += 1; continue
+        if a in ("--model", "-m") and i + 1 < len(argv):
+            model = argv[i+1]; i += 2; continue
+        if a in ("--chat", "-c") and i + 1 < len(argv):
+            chat = argv[i+1]; i += 2; continue
+        if a == "think":
+            think = True; i += 1; continue
+        if a == "model" and i + 1 < len(argv):
+            model = argv[i+1]; i += 2; continue
+        prompt.append(a); i += 1
 
-    exists = model_exists(args.model)
+    # Human-friendly management commands.
+    if prompt and prompt[0] in ("chats", "list") and len(prompt) == 1:
+        con = db(); chats(con); return
+    if prompt and prompt[0] == "clear" and len(prompt) == 1:
+        con = db(); con.execute("DELETE FROM messages"); con.commit(); print("Memory cleared."); return
+    if prompt and prompt[0] == "delete" and len(prompt) >= 2:
+        con = db(); name = prompt[1]
+        if name == "main": print("The main chat cannot be deleted. Use: ai clear", file=sys.stderr); return
+        con.execute("DELETE FROM messages WHERE chat=?", (name,)); con.execute("DELETE FROM chats WHERE name=?", (name,)); con.commit(); print(f"Deleted chat: {name}."); return
+    if prompt and prompt[0] == "new":
+        chat = prompt[1] if len(prompt) > 1 else "main"
+        new = True; prompt = []
+        if len(argv) > 2: prompt = argv[2:]
+    if prompt and prompt[0] == "chat" and len(prompt) >= 2:
+        chat = prompt[1]; prompt = prompt[2:]
+
+    con = db(); con.execute("INSERT OR IGNORE INTO chats(name) VALUES (?)", (chat,)); con.commit()
+    exists = model_exists(model)
     if exists is False:
-        print(f"error: model '{args.model}' is not installed.", file=sys.stderr)
-        print(f"Install it with: ollama pull {args.model}", file=sys.stderr)
-        sys.exit(1)
-    if exists is None:
-        print("error: Ollama is not running or cannot be reached.", file=sys.stderr)
-        print("Start it with: ollama serve", file=sys.stderr)
-        sys.exit(1)
+        print(f"error: model '{model}' is not installed.", file=sys.stderr)
+        print(f"Install it with: ollama pull {model}", file=sys.stderr); sys.exit(1)
+    if exists is None: sys.exit(1)
 
-    messages = load_messages(con, chat, args.new)
-    if args.prompt:
-        ask(con, chat, args.model, " ".join(args.prompt), messages, args.think)
-        return
+    messages = [] if new else load(con, chat)
+    if prompt:
+        ask(con, chat, model, " ".join(prompt), messages, think); return
 
-    print(f"Terminal-AI | chat: {chat} | model: {args.model} | thinking: {'on' if args.think else 'off'}")
-    print("Type /help for commands, /exit to quit. Saved messages persist between sessions.\n")
+    print(f"Terminal-AI | {chat} | {model} | thinking {'on' if think else 'off'}")
+    print("Type a message, /new, /chats, /clear, /think, or /exit.\n")
     while True:
-        try:
-            prompt = input("> ")
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not prompt.strip():
-            continue
-        if prompt in ("/exit", "/quit"):
-            break
-        if prompt == "/help":
-            print("/exit              Exit")
-            print("/new               Start with empty context for this session")
-            print("/chats             List saved chats")
-            print("/clear             Clear all saved messages")
-            print("/think             Toggle thinking mode for this session")
-            continue
-        if prompt == "/new":
-            messages = []
-            print("Started a fresh context. Saved history remains on disk.")
-            continue
-        if prompt == "/chats":
-            list_chats(con)
-            continue
-        if prompt == "/clear":
-            clear_memory(con)
-            messages = []
-            continue
-        if prompt == "/think":
-            args.think = not args.think
-            print(f"Thinking {'enabled' if args.think else 'disabled'} for this session.")
-            continue
-        ask(con, chat, args.model, prompt, messages, args.think)
+        try: text = input("> ")
+        except (EOFError, KeyboardInterrupt): print(); return
+        text = text.strip()
+        if not text: continue
+        if text in ("/exit", "/quit", "exit", "quit"): return
+        if text in ("/chats", "chats"): chats(con); continue
+        if text in ("/clear", "clear"): con.execute("DELETE FROM messages"); con.commit(); messages=[]; print("Memory cleared."); continue
+        if text in ("/new", "new"): messages=[]; print("Fresh context."); continue
+        if text == "/think" or text == "think": think = not think; print(f"Thinking {'on' if think else 'off'}."); continue
+        ask(con, chat, model, text, messages, think)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
 PY
