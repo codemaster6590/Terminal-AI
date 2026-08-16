@@ -1,26 +1,34 @@
 # Terminal-AI
 
-A tiny Bash command for talking to OpenAI directly from a terminal. :3
+A small Linux terminal AI client powered by Ollama. It supports one-shot prompts, interactive chats, and persistent local conversation memory. :3
 
 ## Requirements
 
+- Linux
 - Bash
 - `curl`
 - Python 3
-- An OpenAI API key
+- [Ollama](https://ollama.com/)
+- An Ollama model
 
-## Get an OpenAI API key
+## Install Ollama
 
-1. Go to the [OpenAI API keys page](https://platform.openai.com/api-keys).
-2. Sign in to your OpenAI account, or create one if you do not have one.
-3. Click **Create new secret key**.
-4. Give the key a name, then create it.
-5. Copy the key immediately. The full secret is only shown when it is created.
-6. Keep the key private. Do **not** put it in this repository, commit it to Git, or paste it into public issues/chats.
+Install Ollama using its official Linux installer, then make sure the Ollama service is running.
 
-OpenAI API usage is billed separately from a ChatGPT subscription, so make sure your API account has the required billing/credits before using the command.
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama serve
+```
 
-## Install
+In another terminal, download a model. For a 12 GB GPU, `qwen3:8b` is a reasonable starting point:
+
+```bash
+ollama pull qwen3:8b
+```
+
+You can choose another model if your hardware is different.
+
+## Install Terminal-AI
 
 Clone the repository and install the command:
 
@@ -39,52 +47,85 @@ install -m 755 ai ~/.local/bin/ai
 
 Make sure `~/.local/bin` is in your `PATH`.
 
-## Configure
-
-Set your OpenAI API key:
-
-```bash
-export OPENAI_API_KEY='your-api-key'
-```
-
-To make the key persistent in Bash, add the export to `~/.bashrc` and start a new shell. Avoid putting the key in shell history or sharing your shell configuration publicly.
-
-To change the model:
-
-```bash
-export AI_MODEL='gpt-5.6'
-```
-
 ## Execute
 
-After installation, run the command directly:
+One-shot prompt:
 
 ```bash
 ai "hello"
 ```
 
-For example:
+Choose a model with a flag:
 
 ```bash
-ai "call me pretty :3"
+ai --model qwen3:8b "explain pointers"
 ```
 
 Interactive mode:
 
 ```bash
 ai
-> hello
-> explain this error
-> /exit
 ```
 
-Because output is plain text, it also works nicely with other terminal tools:
+Type messages at the `>` prompt. Use `/exit` or `/quit` to leave.
+
+## Persistent chats
+
+Conversation history is stored locally in a SQLite database under:
+
+```text
+~/.local/share/terminal-ai/terminal-ai.db
+```
+
+Start or reopen a named chat:
 
 ```bash
-ai "explain this" | less
-ai "explain this" | w3m -T text/plain
+ai --chat main
+ai --chat coding
 ```
+
+Create a new named chat:
+
+```bash
+ai --new-chat linux
+```
+
+List saved chats:
+
+```bash
+ai --chats
+```
+
+Delete a chat:
+
+```bash
+ai --delete-chat linux
+```
+
+Clear all saved messages:
+
+```bash
+ai --clear-memory
+```
+
+Use `--new` to temporarily start without loading the saved history. The existing history remains on disk.
+
+## Interactive commands
+
+Inside `ai`:
+
+```text
+/help
+/new
+/chats
+/clear
+/exit
+```
+
+`/new` starts a fresh context for the current session without deleting saved history.
 
 ## Notes
 
-The script talks directly to the OpenAI Responses API. It does not depend on a third-party proxy or AI website.
+Terminal-AI currently targets Linux only. It talks directly to the local Ollama HTTP API, so no API key, payment, or cloud AI account is required. Conversation history is stored locally on your machine.
+
+The current version is a CLI prototype. A full TUI can be added later without changing the persistent chat storage design.
