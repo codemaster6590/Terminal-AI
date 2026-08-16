@@ -11,6 +11,8 @@ A tiny Bash command for talking to OpenAI directly from a terminal. :3
 
 ## Install
 
+Clone the repository and install the command:
+
 ```bash
 git clone https://github.com/codemaster6590/Terminal-AI.git
 cd Terminal-AI
@@ -28,6 +30,8 @@ Make sure `~/.local/bin` is in your `PATH`.
 
 ## Configure
 
+Set your OpenAI API key:
+
 ```bash
 export OPENAI_API_KEY='your-api-key'
 ```
@@ -38,12 +42,17 @@ To change the model:
 export AI_MODEL='gpt-5.6'
 ```
 
-## Usage
+## Execute
 
-One-shot:
+After installation, run the command directly:
 
 ```bash
-ai "explain TCP in simple terms"
+ai "hello"
+```
+
+For example:
+
+```bash
 ai "call me pretty :3"
 ```
 
